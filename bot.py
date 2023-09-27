@@ -1,5 +1,6 @@
 import aiohttp
 import asyncio
+import logging
 from telegram.ext import ApplicationBuilder, ExtBot
 
 async def __get_status(session: aiohttp.ClientSession, models: set[str], country_code: str, location: str):
@@ -7,6 +8,7 @@ async def __get_status(session: aiohttp.ClientSession, models: set[str], country
 
   for model in models:
     url = f'https://www.apple.com/{country_code}/shop/fulfillment-messages?pl=true&parts.0={model}&location={location}'
+    logging.info(f'Fetching {url}')
     async with session.get(url) as response:
       data = await response.json()
 
