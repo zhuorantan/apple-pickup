@@ -9,6 +9,7 @@ async def __get_status(session: aiohttp.ClientSession, models: set[str], country
   for model in models:
     url = f'https://www.apple.com/{country_code}/shop/fulfillment-messages?pl=true&parts.0={model}&location={location}'
     logging.info(f'Fetching {url}')
+
     async with session.get(url) as response:
       data = await response.json()
 
@@ -21,14 +22,13 @@ async def __get_status(session: aiohttp.ClientSession, models: set[str], country
       stores = []
 
       for store in stores_data:
-        storeName = store['storeName']
         part = store['partsAvailability'].get(model)
         if not part:
           continue
         productName = part['messageTypes']['regular']['storePickupProductTitle']
         available = part['messageTypes']['regular']['storeSelectionEnabled']
         if available:
-          stores.append(storeName)
+          stores.append(store['storeName'])
 
       status[model] = (productName, stores)
 
@@ -36,16 +36,16 @@ async def __get_status(session: aiohttp.ClientSession, models: set[str], country
 
 async def __start(bot: ExtBot, chat_ids: set[int], models: set[str], country_code: str, location: str):
   session = aiohttp.ClientSession()
-  last_status_by_model = {}
+  stores_by_model = {}
 
   while True:
-    status_by_model = await __get_status(session, models, country_code, location)
-
-    for product, status in status_by_model.items():
-      if last_status_by_model.get(product) == status:
+    for model, (product, stores) in (await __get_status(session, models, country_code, location)).items():
+      last_stores = stores_by_model.get(model, [])
+      if last_stores == stores:
         continue
+      stores_by_model[model] = stores
 
-      product, stores = status
+      logging.info(f'Product availability changed for {product}, from {last_stores} to {stores}')
 
       for chat_id in chat_ids:
         if not stores:
@@ -54,9 +54,10 @@ async def __start(bot: ExtBot, chat_ids: set[int], models: set[str], country_cod
           store_list = '\n'.join(f'• {store}' for store in stores)
           message = f'✅ *{product}* is available for pickup at:\n{store_list}'
 
-        await bot.send_message(chat_id=chat_id, text=message, parse_mode='MarkdownV2')
-
-    last_status_by_model = status_by_model
+        try:
+          await bot.send_message(chat_id=chat_id, text=message, parse_mode='MarkdownV2')
+        except Exception as e:
+          logging.error(f'Failed to send message to chat {chat_id}: {e}')
 
     await asyncio.sleep(20)
 
