@@ -6,31 +6,31 @@ from telegram.ext import ApplicationBuilder, ExtBot
 async def __get_status(session: aiohttp.ClientSession, models: set[str], country_code: str, location: str):
   status = {}
 
-  for model in models:
-    url = f'https://www.apple.com/{country_code}/shop/fulfillment-messages?pl=true&parts.0={model}&location={location}'
-    logging.info(f'Fetching {url}')
+  parts = '&'.join(f'parts.{i}={model}' for i, model in enumerate(models))
+  url = f'https://www.apple.com/{country_code}/shop/fulfillment-messages?pl=true&{parts}&location={location}'
+  logging.info(f'Fetching {url}')
 
-    async with session.get(url) as response:
-      data = await response.json()
+  async with session.get(url) as response:
+    data = await response.json()
+    stores_data = data['body']['content']['pickupMessage']['stores']
 
-      stores_data = data['body']['content']['pickupMessage']['stores']
-      if not stores_data:
-        logging.warning(f'No stores found for {model}. data: {data}')
-        continue
-
-      productName = None
-      stores = []
-
-      for store in stores_data:
+    for store in stores_data:
+      for model in models:
         part = store['partsAvailability'].get(model)
+        storeName = store['storeName']
         if not part:
+          logging.warning(f'No data for model {model} in store {storeName}')
           continue
+
         productName = part['messageTypes']['regular']['storePickupProductTitle']
         available = part['messageTypes']['regular']['storeSelectionEnabled']
-        if available:
-          stores.append(store['storeName'])
+        if model not in status:
+          status[model] = (productName, [])
 
-      status[model] = (productName, stores)
+        if not available:
+          continue
+
+        status[model][1].append(storeName)
 
   return status
 
@@ -59,7 +59,7 @@ async def __start(bot: ExtBot, chat_ids: set[int], models: set[str], country_cod
         except Exception as e:
           logging.error(f'Failed to send message to chat {chat_id}: {e}')
 
-    await asyncio.sleep(20)
+    await asyncio.sleep(15)
 
 def run(token: str, chat_ids: set[int], models: set[str], country_code, location: str):
   app_builder = ApplicationBuilder().token(token)
