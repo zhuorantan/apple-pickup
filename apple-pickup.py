@@ -7,6 +7,9 @@ logging.basicConfig(
   format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
   level=logging.INFO,
 )
+# Telegram API URLs contain the bot token; suppress HTTP request URL logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 if __name__ == "__main__":
   def get_chat_ids_from_env():

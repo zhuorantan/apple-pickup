@@ -1,0 +1,42 @@
+x-vpn: &vpn
+  image: qmcgaw/gluetun:v3.41.1
+  cap_add:
+    - NET_ADMIN
+  devices:
+    - /dev/net/tun:/dev/net/tun
+  env_file:
+    - .vpn.env
+  environment:
+    VPN_SERVICE_PROVIDER: protonvpn
+    VPN_TYPE: openvpn
+    OPENVPN_PROTOCOL: udp
+    SERVER_COUNTRIES: Canada
+    DNS_UPSTREAM_RESOLVER_TYPE: doh
+    VPN_PORT_FORWARDING: "off"
+    HTTP_CONTROL_SERVER_ADDRESS: :8000
+    HTTPPROXY: "on"
+    HTTPPROXY_LISTENING_ADDRESS: :8888
+    HTTPPROXY_LOG: "off"
+    HTTPPROXY_STEALTH: "on"
+    FIREWALL_INPUT_PORTS: 8000,8888
+  restart: unless-stopped
+
+services:
+  vpn-a:
+    <<: *vpn
+  vpn-b:
+    <<: *vpn
+  apple-pickup:
+    build: .
+    env_file:
+      - .env
+    environment:
+      GLUETUN_ENDPOINTS: >-
+        [{"name":"a","control_url":"http://vpn-a:8000","proxy_url":"http://vpn-a:8888"},
+         {"name":"b","control_url":"http://vpn-b:8000","proxy_url":"http://vpn-b:8888"}]
+    depends_on:
+      vpn-a:
+        condition: service_started
+      vpn-b:
+        condition: service_started
+    restart: unless-stopped
